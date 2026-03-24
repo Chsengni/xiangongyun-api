@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-仙宫云API调用脚本
+仙宫云 API 调用脚本
 
-封装仙宫云开放平台的所有API接口，支持实例管理、私有镜像管理、账号管理等操作。
+封装仙宫云开放平台的所有 API 接口，支持实例管理、私有镜像管理、账号管理等操作。
 
 使用方法:
     python xiangongyun_api.py --action <action> [--params ...]
@@ -19,15 +19,30 @@ import os
 import sys
 from typing import Any, Dict, Optional
 import requests
+import yaml
 
-# API基础配置
-BASE_URL = "https://api.xiangongyun.com"
-SKILL_ID = "7620645430892183558"
-CREDENTIAL_KEY = f"COZE_XIANGONGYUN_API_{SKILL_ID}"
+# 获取脚本所在目录
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+CONFIG_FILE = os.path.join(PROJECT_ROOT, "config", "config.yaml")
+
+
+def load_config() -> Dict[str, Any]:
+    """从 config.yaml 加载配置"""
+    if not os.path.exists(CONFIG_FILE):
+        raise FileNotFoundError(f"配置文件不存在：{CONFIG_FILE}")
+    
+    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+# 加载配置
+config = load_config()
+BASE_URL = config.get("api", {}).get("base_url", "https://api.xiangongyun.com")
 
 
 class XianGongYunAPI:
-    """仙宫云API客户端"""
+    """仙宫云 API 客户端"""
 
     def __init__(self):
         self.api_key = self._get_api_key()
@@ -37,11 +52,11 @@ class XianGongYunAPI:
         }
 
     def _get_api_key(self) -> str:
-        """从环境变量获取API密钥"""
-        api_key = os.getenv(CREDENTIAL_KEY)
-        if not api_key:
+        """从 config.yaml 获取 API 令牌"""
+        api_key = config.get("api", {}).get("access_token")
+        if not api_key or api_key == "YOUR_ACCESS_TOKEN_HERE":
             raise ValueError(
-                f"缺少仙宫云API凭证。请确保环境变量 {CREDENTIAL_KEY} 已正确配置。"
+                f"缺少仙宫云 API 令牌。请在 {CONFIG_FILE} 中配置有效的 access_token。"
             )
         return api_key
 
@@ -52,7 +67,7 @@ class XianGongYunAPI:
         params: Optional[Dict] = None,
         data: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """发送HTTP请求"""
+        """发送 HTTP 请求"""
         url = f"{BASE_URL}{endpoint}"
 
         try:
@@ -61,30 +76,30 @@ class XianGongYunAPI:
             elif method.upper() == "POST":
                 response = requests.post(url, headers=self.headers, json=data, timeout=30)
             else:
-                raise ValueError(f"不支持的HTTP方法: {method}")
+                raise ValueError(f"不支持的 HTTP 方法：{method}")
 
-            # 检查HTTP状态码
+            # 检查 HTTP 状态码
             if response.status_code >= 400:
                 raise Exception(
-                    f"HTTP请求失败: 状态码 {response.status_code}, "
-                    f"响应内容: {response.text}"
+                    f"HTTP 请求失败：状态码 {response.status_code}, "
+                    f"响应内容：{response.text}"
                 )
 
             result = response.json()
 
-            # 检查API响应状态
+            # 检查 API 响应状态
             if not result.get("success", True):
                 raise Exception(
-                    f"API错误: {result.get('msg', '未知错误')} "
+                    f"API 错误：{result.get('msg', '未知错误')} "
                     f"(code: {result.get('code', 'N/A')})"
                 )
 
             return result
 
         except requests.exceptions.RequestException as e:
-            raise Exception(f"网络请求失败: {str(e)}")
+            raise Exception(f"网络请求失败：{str(e)}")
 
-    # ==================== 实例管理API ====================
+    # ==================== 实例管理 API ====================
 
     def list_instances(self) -> Dict[str, Any]:
         """获取实例列表"""
@@ -134,11 +149,11 @@ class XianGongYunAPI:
         return self._request("POST", "/open/instance/destroy", data={"id": instance_id})
 
     def shutdown_instance(self, instance_id: str) -> Dict[str, Any]:
-        """关机保留GPU"""
+        """关机保留 GPU"""
         return self._request("POST", "/open/instance/shutdown", data={"id": instance_id})
 
     def shutdown_release_gpu(self, instance_id: str) -> Dict[str, Any]:
-        """关机释放GPU"""
+        """关机释放 GPU"""
         return self._request(
             "POST", "/open/instance/shutdown_release_gpu", data={"id": instance_id}
         )
@@ -167,7 +182,7 @@ class XianGongYunAPI:
             data={"id": instance_id, "image_name": image_name}
         )
 
-    # ==================== 私有镜像API ====================
+    # ==================== 私有镜像 API ====================
 
     def list_images(self) -> Dict[str, Any]:
         """获取镜像列表"""
@@ -181,7 +196,7 @@ class XianGongYunAPI:
         """销毁镜像"""
         return self._request("POST", "/open/image/destroy", data={"id": image_id})
 
-    # ==================== 账号API ====================
+    # ==================== 账号 API ====================
 
     def get_user_info(self) -> Dict[str, Any]:
         """获取用户信息"""
@@ -208,7 +223,7 @@ class XianGongYunAPI:
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="仙宫云API调用工具",
+        description="仙宫云 API 调用工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 支持的操作 (action):
@@ -218,8 +233,8 @@ def main():
     list_instance_images    - 获取实例储存的镜像 (需要 --instance-id)
     deploy_instance         - 部署实例 (需要 --name, --gpu-count, --image)
     destroy_instance        - 销毁实例 (需要 --instance-id)
-    shutdown_instance       - 关机保留GPU (需要 --instance-id)
-    shutdown_release_gpu    - 关机释放GPU (需要 --instance-id)
+    shutdown_instance       - 关机保留 GPU (需要 --instance-id)
+    shutdown_release_gpu    - 关机释放 GPU (需要 --instance-id)
     shutdown_destroy        - 关机并销毁 (需要 --instance-id)
     boot_instance           - 开机 (需要 --instance-id)
     save_image              - 储存镜像 (需要 --instance-id, --image-name)
@@ -239,15 +254,15 @@ def main():
     )
 
     parser.add_argument("--action", required=True, help="要执行的操作")
-    parser.add_argument("--instance-id", help="实例ID")
-    parser.add_argument("--image-id", help="镜像ID")
+    parser.add_argument("--instance-id", help="实例 ID")
+    parser.add_argument("--image-id", help="镜像 ID")
     parser.add_argument("--name", help="实例名称")
-    parser.add_argument("--gpu-count", type=int, help="GPU数量")
+    parser.add_argument("--gpu-count", type=int, help="GPU 数量")
     parser.add_argument("--image", help="镜像名称")
     parser.add_argument("--data-center", help="数据中心")
-    parser.add_argument("--ssh-key", help="SSH密钥")
+    parser.add_argument("--ssh-key", help="SSH 密钥")
     parser.add_argument("--password", help="密码")
-    parser.add_argument("--image-name", help="镜像名称(保存镜像时使用)")
+    parser.add_argument("--image-name", help="镜像名称 (保存镜像时使用)")
     parser.add_argument("--amount", type=float, help="充值金额")
     parser.add_argument("--payment", help="支付方式 (alipay/wechat)")
     parser.add_argument("--trade-no", help="交易订单号")
@@ -335,17 +350,17 @@ def main():
             result = api.query_recharge_order(args.trade_no)
 
         else:
-            parser.error(f"未知的操作: {args.action}")
+            parser.error(f"未知的操作：{args.action}")
 
         # 输出结果
         print(json.dumps(result, ensure_ascii=False, indent=2))
         sys.exit(0)
 
     except ValueError as e:
-        print(f"参数错误: {str(e)}", file=sys.stderr)
+        print(f"参数错误：{str(e)}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"执行失败: {str(e)}", file=sys.stderr)
+        print(f"执行失败：{str(e)}", file=sys.stderr)
         sys.exit(1)
 
 
